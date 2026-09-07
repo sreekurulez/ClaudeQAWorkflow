@@ -1,0 +1,8 @@
+{
+  "e2e_test_commands": ["npx playwright test"],
+  "e2e_generated_dir": "dummy-app/tests/e2e/generated",
+  "e2e_baseline_dir": "dummy-app/tests/e2e/regression",
+  "e2e_results_path": "dummy-app/test-results/results.json",
+  "locator_map_path": "state/locator-map.json",
+  "app_root": "dummy-app"
+}

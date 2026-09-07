@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "execute.schema.json",
+  "title": "QA execute result (produced by control-plane/executor.py, NOT an LLM — see docs/control-flow-guardrails.md XP1)",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["caseId", "specPath", "result", "durationMs"],
+    "properties": {
+      "caseId": { "type": "string" },
+      "specPath": { "type": "string" },
+      "result": { "type": "string", "enum": ["pass", "fail", "flaky"] },
+      "errorSignature": { "type": "string", "description": "stable hash/string of the failure, used for no-progress comparison across heal cycles" },
+      "category": { "type": "string", "enum": ["selector", "assertion", "timing", "unknown"] },
+      "durationMs": { "type": "integer", "minimum": 0 }
+    }
+  }
+}

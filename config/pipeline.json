@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "_comment": "Vendor-neutral control-plane config. Mirrors finbook-web-application/.factory/config/pipeline.json's review.qa + timeouts_seconds blocks so this file ports back unchanged (see docs/control-flow-guardrails.md §3.0).",
+  "timeouts_seconds": {
+    "per_call": 900,
+    "per_loop_cycle": 900,
+    "per_run": 7200
+  },
+  "review": {
+    "qa": {
+      "enabled": true,
+      "max_heal_cycles": 2,
+      "flake_recheck_runs": 3,
+      "on_refactor": "retry_qa_stage",
+      "on_failure": "fail_run"
+    }
+  },
+  "budget": {
+    "max_concurrent_invocations": 4,
+    "max_credits_per_task": null
+  },
+  "adapter": "claude"
+}

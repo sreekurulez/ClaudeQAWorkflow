@@ -1,0 +1,87 @@
+[
+  {
+    "elements": [
+      {
+        "confidenceTier": "stable-testid",
+        "name": "login-email-input",
+        "role": "textbox",
+        "testId": "login-email"
+      },
+      {
+        "confidenceTier": "stable-testid",
+        "name": "login-password-input",
+        "role": "textbox",
+        "testId": "login-password"
+      },
+      {
+        "confidenceTier": "stable-testid",
+        "name": "login-submit-button",
+        "role": "button",
+        "testId": "login-submit"
+      },
+      {
+        "confidenceTier": "role-fallback",
+        "fallbackSelector": "getByRole('button',{name:'Sign out'})",
+        "name": "logout-button",
+        "role": "button"
+      },
+      {
+        "confidenceTier": "stable-testid",
+        "name": "item-name-input",
+        "role": "textbox",
+        "testId": "item-name-input"
+      },
+      {
+        "confidenceTier": "stable-testid",
+        "name": "add-item-submit-button",
+        "role": "button",
+        "testId": "add-item-submit"
+      },
+      {
+        "confidenceTier": "stable-testid",
+        "name": "search-input",
+        "role": "textbox",
+        "testId": "search-input"
+      },
+      {
+        "confidenceTier": "role-fallback",
+        "fallbackSelector": "getByRole('button',{name:'Toggle Sort'})",
+        "name": "sort-toggle-button",
+        "role": "button"
+      },
+      {
+        "confidenceTier": "stable-testid",
+        "name": "confirm-delete-button",
+        "role": "button",
+        "testId": "confirm-delete"
+      },
+      {
+        "confidenceTier": "stable-testid",
+        "name": "cancel-delete-button",
+        "role": "button",
+        "testId": "cancel-delete"
+      },
+      {
+        "confidenceTier": "flagged-unstable",
+        "name": "item-name-edit-trigger-span",
+        "note": "app.js:43 \u2014 dynamically created <span> per item with only textContent (the item's name, which varies per row) and a title attribute ('Click to edit') shared by every row; no data-testid, id, or aria-label, so no selector uniquely and stably identifies a specific row's span.",
+        "role": "generic"
+      },
+      {
+        "confidenceTier": "flagged-unstable",
+        "name": "item-inline-edit-input",
+        "note": "app.js:49 \u2014 dynamically created <input> replacing the name span on click; has no data-testid, id, name, aria-label, or associated <label>, and its value is the item name (varies per row), so it has no stable identifying property.",
+        "role": "textbox"
+      },
+      {
+        "confidenceTier": "role-fallback",
+        "fallbackSelector": "getByRole('button',{name:'Delete'})",
+        "name": "item-delete-button",
+        "note": "app.js:78 \u2014 text is stable ('Delete') but every item row renders one, so this selector must be scoped to the specific row's <li> to target a single item; no data-testid is present (intentionally, per app.js:2-3 comment).",
+        "role": "button"
+      }
+    ],
+    "route": "/",
+    "sourceHash": "PENDING"
+  }
+]

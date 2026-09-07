@@ -1,0 +1,17 @@
+{
+  "name": "qa-workflow-dummy-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minimal app for exercising the Claude-powered QA workflow (see ../README.md). Intentionally small: a couple of real flows, on purpose missing data-testid on 1-2 elements to test the locator-explorer's fallback-tier tagging.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.0"
+  }
+}

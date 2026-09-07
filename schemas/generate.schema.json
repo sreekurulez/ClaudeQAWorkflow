@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "generate.schema.json",
+  "title": "QA generate result (qa-test-generator output)",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["caseId", "status"],
+    "properties": {
+      "caseId": { "type": "string" },
+      "specPath": { "type": "string" },
+      "status": { "type": "string", "enum": ["generated", "skipped"] },
+      "reason": { "type": "string", "description": "required when status=skipped" }
+    }
+  }
+}

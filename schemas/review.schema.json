@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "review.schema.json",
+  "title": "QA review result (qa-reviewer output)",
+  "type": "object",
+  "required": ["verdict", "findings"],
+  "properties": {
+    "verdict": { "type": "string", "enum": ["PASS", "REFACTOR", "BLOCKED"] },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "description"],
+        "properties": {
+          "severity": { "type": "string", "enum": ["P0", "P1", "P2"] },
+          "caseId": { "type": "string" },
+          "description": { "type": "string" },
+          "confidenceTier": {
+            "type": "string",
+            "enum": ["stable-testid", "role-fallback", "flagged-unstable"],
+            "description": "set when the finding concerns a case relying on a non-stable locator (see locator-map.schema.json)"
+          }
+        }
+      }
+    }
+  }
+}

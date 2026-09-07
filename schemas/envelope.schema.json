@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "envelope.schema.json",
+  "title": "ResultEnvelope",
+  "description": "Wrapper every role invocation must emit. The 'result' field is validated separately against that role's own schema (plan/generate/execute/heal/review).",
+  "type": "object",
+  "required": ["schemaVersion", "role", "status", "terminal", "metrics"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "role": {
+      "type": "string",
+      "enum": ["qa-test-planner", "qa-test-generator", "qa-test-executor", "qa-test-healer", "qa-reviewer", "qa-locator-explorer", "qa-failure-triage"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["completed", "blocked", "needs_input", "failed"]
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["PASS", "REFACTOR", "BLOCKED"]
+    },
+    "terminal": {
+      "type": "boolean",
+      "description": "true = no further attempt on this unit of work will help; control plane must stop, not retry."
+    },
+    "result": {
+      "description": "Role-specific payload; validated against schemas/<role-phase>.schema.json by the caller."
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "summary"],
+        "properties": {
+          "severity": { "type": "string", "enum": ["P0", "P1", "P2"] },
+          "caseId": { "type": "string" },
+          "summary": { "type": "string" }
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "required": ["duration_s"],
+      "properties": {
+        "turns": { "type": "integer", "minimum": 0 },
+        "duration_s": { "type": "number", "minimum": 0 },
+        "tokens": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

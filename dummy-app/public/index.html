@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>QA Workflow Dummy App</title>
+</head>
+<body>
+  <section id="login-section">
+    <h1>Sign in</h1>
+    <form id="login-form">
+      <label for="email">Email</label>
+      <input id="email" type="email" data-testid="login-email" />
+      <label for="password">Password</label>
+      <input id="password" type="password" data-testid="login-password" />
+      <button type="submit" data-testid="login-submit">Sign in</button>
+    </form>
+    <p id="login-error" data-testid="login-error" hidden></p>
+  </section>
+
+  <section id="items-section" hidden>
+    <h1>Items</h1>
+    <div data-testid="current-user-indicator">Signed in</div>
+    <button id="logout-button">Sign out</button>
+
+    <form id="add-item-form">
+      <label for="item-name">New item</label>
+      <input id="item-name" data-testid="item-name-input" />
+      <button type="submit" data-testid="add-item-submit">Add item</button>
+    </form>
+
+    <div style="margin-top: 10px; margin-bottom: 10px;">
+      <label for="search-input">Search:</label>
+      <input id="search-input" data-testid="search-input" />
+      <button id="sort-button">Toggle Sort</button>
+    </div>
+
+    <ul id="item-list" data-testid="item-list"></ul>
+  </section>
+
+  <script src="app.js" defer></script>
+
+  <!-- Confirmation Modal -->
+  <div id="confirm-modal" style="display: none; position: fixed; top: 30%; left: 50%; transform: translate(-50%, -50%); background: white; border: 1px solid black; padding: 20px; z-index: 1000; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
+    <p>Are you sure you want to delete this item?</p>
+    <button id="confirm-delete" data-testid="confirm-delete">Confirm</button>
+    <button id="cancel-delete" data-testid="cancel-delete">Cancel</button>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" style="display: none; position: fixed; bottom: 20px; right: 20px; background: #333; color: white; padding: 10px 20px; border-radius: 5px; z-index: 1000;"></div>
+</body>
+</html>

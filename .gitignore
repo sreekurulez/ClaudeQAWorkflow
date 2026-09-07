@@ -1,0 +1,9 @@
+node_modules/
+dummy-app/test-results/
+dummy-app/playwright-report/
+state/*.jsonl
+state/*/
+!state/.gitkeep
+__pycache__/
+*.pyc
+.venv/

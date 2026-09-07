@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "heal.schema.json",
+  "title": "QA heal result (qa-test-healer output, one invocation per caseId per docs/control-flow-guardrails.md §3.3b)",
+  "type": "object",
+  "required": ["caseId", "action", "attemptNumber"],
+  "properties": {
+    "caseId": { "type": "string" },
+    "action": { "type": "string", "enum": ["fixed", "escalated", "quarantined"] },
+    "diffSummary": { "type": "string" },
+    "attemptNumber": { "type": "integer", "minimum": 1 },
+    "touchedAssertionLine": {
+      "type": "boolean",
+      "description": "must be false; diff-guard rejects a heal that reports/detects true (QP7 actor/judge separation)"
+    }
+  }
+}

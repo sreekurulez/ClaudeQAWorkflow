@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "locator-map.schema.json",
+  "title": "Locator/page-object manifest (qa-locator-explorer output, docs/control-flow-guardrails.md §3.6)",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["route", "elements", "sourceHash"],
+    "properties": {
+      "route": { "type": "string" },
+      "sourceHash": { "type": "string", "description": "hash of the source file(s) this entry was derived from; mismatch on a later run means stale, re-scan" },
+      "elements": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["name", "confidenceTier"],
+          "properties": {
+            "name": { "type": "string" },
+            "role": { "type": "string" },
+            "testId": { "type": "string" },
+            "fallbackSelector": { "type": "string" },
+            "confidenceTier": {
+              "type": "string",
+              "enum": ["stable-testid", "role-fallback", "flagged-unstable"]
+            }
+          }
+        }
+      }
+    }
+  }
+}

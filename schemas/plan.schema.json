@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "plan.schema.json",
+  "title": "QA plan result (qa-test-planner output)",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["caseId", "priority", "type", "steps", "expected", "gap"],
+    "properties": {
+      "caseId": { "type": "string", "pattern": "^[A-Za-z0-9_-]+-E[0-9]+$" },
+      "priority": { "type": "string", "enum": ["P0", "P1", "P2"] },
+      "type": { "type": "string", "enum": ["functional", "negative", "edge", "regression-impact"] },
+      "preconditions": { "type": "string" },
+      "steps": { "type": "string" },
+      "expected": { "type": "string" },
+      "selectors": { "type": "array", "items": { "type": "string" } },
+      "gap": { "type": "boolean", "description": "true if a required selector does not exist yet" }
+    }
+  }
+}
