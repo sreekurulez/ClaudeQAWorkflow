@@ -1,8 +1,13 @@
-# TODO — Next Action Items
+# TODO — Historical build log (all items complete)
 
-Status markers: 🔴 blocking (verify before the first real `claude` invocation) / 🟡 needed to
-complete the design / 🟢 later. See `README.md` for architecture, `RUNBOOK.md` to operate it,
-`MIGRATION_TO_FACTORY.md` for the eventual port.
+**This is a historical record, not an active task list.** Every item below is done — the
+status markers (🔴/🟡/🟢) reflect priority *as originally planned*, kept as-written so the log
+stays an accurate account of what was verified and in what order, not because anything is still
+outstanding. For current architecture and day-to-day operating instructions, read
+`HOW_IT_WORKS.md` — that's the single source of truth for how this system works. See
+`README.md` for layout/porting, `MIGRATION_TO_FACTORY.md` for the eventual Factory port. This
+file is worth reading for *why* things are built the way they are — several real bugs were
+found and fixed along the way, documented in place below.
 
 ## ✅ Blocking items — verified 2026-09-06 against installed `claude` v2.1.263
 

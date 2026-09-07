@@ -421,15 +421,83 @@ is never silently reused.
 
 ---
 
-## 11. Where to look next
+## 11. Day-to-day operator reference
 
-- `README.md` — the project's own architecture overview and file layout.
-- `RUNBOOK.md` — practical day-to-day operating instructions.
-- `TODO.md` — a detailed, dated log of every gap found and fixed while building this, including
-  several real bugs discovered only by actually running the system live — genuinely useful
-  reading for understanding *why* certain things are built the way they are, not just *what*
-  they do.
-- `tests/golden/README.md` — the six (plus one) acceptance scenarios that prove the safety
-  mechanisms actually work, and the runnable scripts that verify them.
+This section is the practical cheat-sheet for actually running the thing day to day — §3–§5
+already covered the mechanism; this is just the commands.
+
+**One-time setup:**
+
+```bash
+cd dummy-app && npm install && npx playwright install
+cd ../control-plane && pip install -r requirements.txt
+claude --version   # confirm the CLI is on PATH and authenticated
+```
+
+**Pick a task ID.** Every run is namespaced under a `task_id` you choose (e.g. `demo-1`,
+`fix-login-bug-42`) — it's just the folder name under `state/` where that run's files land (§9).
+There's no registry to update; using a new task ID is how you start a fresh, independent run.
+
+**Inspect what happened after a run:**
+
+| What | Where |
+|---|---|
+| Phase outputs | `state/<task-id>/plan.json`, `state/<task-id>/generate.json` |
+| Heal history (control-plane-owned, per `caseId`) | `state/<task-id>/heal.manifest.json` |
+| Every invocation, every task, one line each | `state/ledger.jsonl` |
+| Raw Playwright results | `dummy-app/test-results/results.json` |
+
+```bash
+tail -f ../state/ledger.jsonl   # watch invocations as they happen
+```
+
+**Re-running after a fix or a crash:**
+- Force a full replan: delete `state/<task-id>/plan.json` and rerun `--phase plan`.
+- Resume a partially-completed `generate`/`heal` phase: just rerun the same phase — the manifest
+  (§9) skips `caseId`s already recorded done, unless the plan's content changed since, in which
+  case the input-hash mismatch invalidates the manifest automatically and it starts over.
+
+**Reading a `BLOCKED` result.** `orchestrator.py`'s JSON output names the reason: `"planning
+failed"`, `"generation failed"`, `"heal loop exhausted or no-progress"`, or an
+`InvocationBlocked` message (schema-invalid output, or a timeout). Check the last few lines of
+`state/ledger.jsonl` for the specific role/phase/exit_code that caused it before retrying
+anything — a timeout (`exit_code: 124`) needs a different fix than a schema failure.
+
+**Resetting the dummy app's data between manual runs.** Generated/baseline specs already call
+the reset endpoint via `beforeEach`; to reset outside a test run:
+
+```bash
+curl -X POST http://localhost:4000/api/__test__/reset
+```
+
+**Clearing all state and starting fresh:**
+
+```bash
+rm -rf state/*
+touch state/.gitkeep
+```
+
+**Running the golden-task acceptance scenarios** (see `tests/golden/README.md` for what each
+one proves):
+
+```bash
+cd tests/golden
+python3 run_all.py                       # all 7 scenarios
+python3 scenario_1_clean_pass.py         # or just one, while iterating
+```
+
+---
+
+## 12. Where to look next
+
+- `README.md` — short project overview, file layout, and how to point this at a different app
+  (not just `dummy-app/`) or port it to Factory. This file (`HOW_IT_WORKS.md`) is the primary
+  reference for how the system actually works and how to operate it day to day.
+- `TODO.md` — a historical, dated log of every gap found and fixed while building this
+  (all items are done — it's a build diary, not an active task list), including several real
+  bugs discovered only by actually running the system live — genuinely useful reading for
+  understanding *why* certain things are built the way they are, not just *what* they do.
+- `tests/golden/README.md` — the seven acceptance scenarios that prove the safety mechanisms
+  actually work, and the runnable scripts that verify them.
 - `MIGRATION_TO_FACTORY.md` — what changes (and, more importantly, what *doesn't*) if this gets
   ported to a different underlying agent runtime.

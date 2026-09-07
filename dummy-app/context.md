@@ -2,10 +2,11 @@
 
 You are building the application this project's QA workflow will be tested against. The
 workflow itself (planner/generator/executor/healer/reviewer/locator-explorer, all in
-`control-plane/` + `roles/`) is already built and documented in `README.md`, `RUNBOOK.md`, and
-`tests/golden/README.md` — read `tests/golden/README.md` in particular, since the six scenarios
-listed there are the acceptance test for whatever you build: each one needs a real feature in
-this app to exercise it.
+`control-plane/` + `roles/`) is already built and documented in `HOW_IT_WORKS.md` (the single
+source of truth for how it works and how to operate it), `README.md`, and
+`tests/golden/README.md` — read `tests/golden/README.md` in particular, since the seven
+scenarios listed there are the acceptance test for whatever you build: each one needs a real
+feature in this app to exercise it.
 
 A minimal placeholder currently lives in `dummy-app/` (`server.js` + `public/`). Your job is to
 replace/extend it into something more realistic while preserving the integration contract below
