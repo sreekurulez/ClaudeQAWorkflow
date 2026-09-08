@@ -4,5 +4,65 @@
   "e2e_baseline_dir": "dummy-app/tests/e2e/regression",
   "e2e_results_path": "dummy-app/test-results/results.json",
   "locator_map_path": "state/locator-map.json",
-  "app_root": "dummy-app"
+  "app_root": "dummy-app",
+  "app_source_dir": "dummy-app/src",
+  "test_isolation": {
+    "_comment": "IMPLEMENTATION_STRATEGY.md §7.1 — declares how AI-written specs get a clean slate, instead of every role file hardcoding a specific reset endpoint. dummy-app uses 'reset_endpoint'; a real app without one would need 'self_contained' (each test creates and cleans up its own uniquely-marked data) or 'external_seed' (a dedicated test environment reset out-of-band, not per-test).",
+    "strategy": "reset_endpoint",
+    "reset_call": "POST /api/__test__/reset"
+  },
+  "auth": {
+    "_comment": "IMPLEMENTATION_STRATEGY.md §7.2 — declares how a spec establishes a logged-in session, instead of role files hardcoding testids/routes. dummy-app uses 'form_login'. A real app behind external SSO (e.g. Keycloak) would need a 'storage_state' strategy instead (log in once out-of-band, reuse a saved Playwright storageState — see §4.2/§7.2's 'hard rule': never fall back to crawling/testing whatever page a failed or missing session lands on).",
+    "strategy": "form_login",
+    "login_route": "/login",
+    "email_testid": "login-email",
+    "password_testid": "login-password",
+    "submit_testid": "login-submit",
+    "test_credentials": {
+      "_comment": "Fine as literal values for dummy-app's own fixture data (already public, visible in its committed specs). A real project should point these at env var names instead, not commit real credentials here.",
+      "email": "user@example.com",
+      "password": "password123"
+    }
+  },
+  "_component_test_app_root_comment": "IMPLEMENTATION_STRATEGY.md §2.3 — Stage 3, the component-test track. Unlike every other path here, component_test_app_root below is absolute: the target (finbook-web-application) is a sibling repo outside QAWorkflowClaudeCode, not something living inside app_root/dummy-app.",
+  "component_test_app_root": "/Users/sreekanth.s/Documents/Projects/finbook-web-application",
+  "component_test_command": ["npx react-scripts test"],
+  "component_test_results_path": "state/component-test-results.json",
+  "_crawl_comment": "IMPLEMENTATION_STRATEGY.md §4/Stage 7 — the browser-based locator crawler (control-plane/crawl.js). base_url is where the app is actually served (server.js's real port); crawl_pages is the explicit page list the plan calls for (~10 lines, not derived from a router parser). Parameterized detail routes (/items/:id etc.) are deliberately excluded from this first pass — see IMPLEMENTATION_STRATEGY.md's Stage 7 writeup for why.",
+  "base_url": "http://localhost:4000",
+  "crawl_pages": [
+    { "route": "/login", "requiresAuth": false },
+    { "route": "/items", "requiresAuth": true, "navLinkName": "Items" },
+    { "route": "/cart", "requiresAuth": true, "navLinkName": "Cart" },
+    { "route": "/orders", "requiresAuth": true, "navLinkName": "Orders" },
+    { "route": "/profile", "requiresAuth": true, "navLinkName": "Profile" }
+  ],
+  "_route_source_files_comment": "IMPLEMENTATION_STRATEGY.md §5/§6/Stage 8 — the 'declare it in config' impact map, deliberately NOT a dependency-graph tool (graphify was considered and rejected — see §5). Coarse and per-route, not per-element: a case touching a shared component (Header.tsx) maps to every route that imports it, same as a real import graph would resolve, without needing one. Unmapped changed files must fail open (§6's safety rails) — not implemented as a gate yet, since selection itself isn't switched on (§6: 'why not switch on selective test runs yet').",
+  "route_source_files": {
+    "/login": ["dummy-app/src/pages/LoginPage.tsx"],
+    "/items": [
+      "dummy-app/src/pages/ItemsPage.tsx",
+      "dummy-app/src/components/ProductList.tsx",
+      "dummy-app/src/components/Header.tsx",
+      "dummy-app/server.js"
+    ],
+    "/cart": [
+      "dummy-app/src/pages/CartPage.tsx",
+      "dummy-app/src/pages/CartItemPage.tsx",
+      "dummy-app/src/components/CartButton.tsx",
+      "dummy-app/src/components/PriceDisplay.tsx",
+      "dummy-app/src/components/Header.tsx"
+    ],
+    "/orders": [
+      "dummy-app/src/pages/OrdersPage.tsx",
+      "dummy-app/src/pages/OrderDetailPage.tsx",
+      "dummy-app/src/components/Header.tsx",
+      "dummy-app/server.js"
+    ],
+    "/profile": [
+      "dummy-app/src/pages/ProfilePage.tsx",
+      "dummy-app/src/components/Header.tsx"
+    ]
+  },
+  "traceability_path": "state/traceability.json"
 }

@@ -8,9 +8,11 @@ analysis, regardless of vendor.
 
 **→ Read `HOW_IT_WORKS.md` first.** It's the single source of truth for how this system works
 and how to operate it day to day (entry point, pipeline stages, running any phase standalone,
-the AI-role schemas, configuration, operator commands). This file covers only what
-`HOW_IT_WORKS.md` doesn't: project layout, and how to point the workflow at a different app or
-port it to Factory.
+the AI-role schemas, configuration, operator commands) — and its "Where to look next" section is
+a map of every other document in this repo: what's current, what's superseded, and what's
+pending. For active/planned work specifically, see `IMPLEMENTATION_STRATEGY.md`. This file
+covers only what `HOW_IT_WORKS.md` doesn't: project layout, and how to point the workflow at a
+different app or port it to Factory.
 
 ## Layout
 

@@ -6,7 +6,9 @@ not prose for a human, an artifact the generator consumes directly (docs §3.6).
 
 ## Inputs
 
-- `dummy-app/` source (routes, page components, existing selectors)
+- The application source, at the directory named in the prompt's Project Context block (routes,
+  page components, existing selectors) — always use that path, never one remembered from a
+  previous task or a different project
 - The **testability fact list** given in the prompt (from a deterministic grep/AST check the
   control plane ran — you rank/interpret these facts, you do not re-derive them by reading
   every file yourself; see docs §1.4/G4)

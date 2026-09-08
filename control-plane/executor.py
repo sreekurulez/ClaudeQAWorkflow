@@ -10,6 +10,7 @@ a separate, narrow LLM call — see roles/qa-failure-triage.md, invoked only whe
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -115,6 +116,102 @@ def _extract_case_id(spec: dict[str, Any], abs_spec_path: Path | None) -> str:
             return match.group(1)
     title = spec.get("title", "unknown")
     return title.split("@case")[-1].strip().split()[0] if "@case" in title else title
+
+
+def _resolve_app_root(value: str) -> Path:
+    """Every other config path is ROOT-relative because dummy-app lives inside this repo.
+    component_test_app_root doesn't — the component-test target (e.g. finbook-web-application)
+    is a sibling repo outside this one — so this accepts an absolute path too, rather than
+    forcing an awkward '../' relative value into a config convention built for paths inside
+    ROOT."""
+    path = Path(value)
+    return path if path.is_absolute() else ROOT / value
+
+
+def run_jest(spec_paths: list[str] | None = None, *, with_coverage: bool = False) -> None:
+    """Component-test-track equivalent of run_playwright() (IMPLEMENTATION_STRATEGY.md §2.3 —
+    Stage 3). Reads `component_test_command` from project config rather than assuming
+    `react-scripts test` or bare `jest` — Finbook uses the former, a Jest-native project the
+    latter. `--json --outputFile=<component_test_results_path>` is appended here, not baked
+    into config, so the config value stays a plain "how do I run this project's tests" command
+    a human could also run by hand.
+
+    `with_coverage` opts into Jest's own --collectCoverage (IMPLEMENTATION_STRATEGY.md §6/Stage
+    8's "measured" traceability tier) — real overhead (~19s vs <1s, verified live), so this is
+    never the default; call it explicitly once a spec has already passed once via the normal
+    path, not on every run."""
+    project = load_project_config()
+    app_root = _resolve_app_root(project["component_test_app_root"])
+    results_path = ROOT / project["component_test_results_path"]
+    for command in project["component_test_command"]:
+        cmd = command.split() + ["--json", f"--outputFile={results_path}"]
+        if spec_paths:
+            cmd += ["--testPathPattern", "|".join(re.escape(p) for p in spec_paths)]
+        if with_coverage:
+            cmd += ["--collectCoverage", "--coverageReporters=json-summary"]
+        subprocess.run(cmd, cwd=app_root, check=False, env={**os.environ, "CI": "true"})
+
+
+def parse_jest_coverage() -> list[str]:
+    """Reads Jest's own coverage-summary.json (produced by run_jest(with_coverage=True)) and
+    returns repo-relative paths of files with genuine statement coverage — verified live
+    against a real run: the summary lists every instrumented file in the project (thousands),
+    almost all at zero: filtering on statements.covered > 0 isolates exactly the files the run
+    actually touched, cleanly, no further heuristics needed."""
+    project = load_project_config()
+    app_root = _resolve_app_root(project["component_test_app_root"])
+    summary_path = app_root / "coverage" / "coverage-summary.json"
+    if not summary_path.is_file():
+        return []
+    with summary_path.open("r", encoding="utf-8") as handle:
+        summary = json.load(handle)
+    touched = []
+    for file_path, stats in summary.items():
+        if file_path == "total":
+            continue
+        if stats.get("statements", {}).get("covered", 0) > 0:
+            abs_path = Path(file_path)
+            touched.append(str(abs_path.relative_to(app_root)) if abs_path.is_relative_to(app_root) else file_path)
+    return touched
+
+
+def parse_jest_results() -> list[dict[str, Any]]:
+    """Reads Jest's own --json reporter output (verified against a live run against the real
+    finbook-web-application repo, 2026-09-08 — not assumed) into execute.schema.json-shaped
+    entries, mirroring parse_results()'s Playwright path. Jest's shape is simpler than
+    Playwright's: no nested suite tree to walk, and (in the version actually installed) no
+    per-assertion duration — durationMs is reported as 0, which is schema-valid (the field is
+    required, not required non-zero)."""
+    project = load_project_config()
+    results_path = ROOT / project["component_test_results_path"]
+    if not results_path.is_file():
+        return []
+
+    with results_path.open("r", encoding="utf-8") as handle:
+        raw = json.load(handle)
+
+    entries: list[dict[str, Any]] = []
+    for test_file in raw.get("testResults", []):
+        abs_path = Path(test_file["name"])
+        repo_rel_spec_path = str(abs_path.relative_to(ROOT)) if abs_path.is_relative_to(ROOT) else test_file["name"]
+        case_id = _extract_case_id({}, abs_path)
+        for assertion in test_file.get("assertionResults", []):
+            status = assertion.get("status", "unknown")
+            if status in ("pending", "todo"):
+                continue  # same "not applicable this run" treatment as Playwright's "skipped"
+            outcome = "pass" if status == "passed" else "fail"
+            error_text = " ".join(assertion.get("failureMessages", []))
+            entries.append(
+                {
+                    "caseId": case_id,
+                    "specPath": repo_rel_spec_path,
+                    "result": outcome,
+                    "errorSignature": error_text[:200] if error_text else None,
+                    "category": _categorize(error_text) if error_text else None,
+                    "durationMs": 0,
+                }
+            )
+    return entries
 
 
 def mark_flaky(entries: list[dict[str, Any]], flaky_case_ids: set[str]) -> list[dict[str, Any]]:

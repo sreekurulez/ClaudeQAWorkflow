@@ -1,17 +1,27 @@
 {
   "name": "qa-workflow-dummy-app",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Minimal app for exercising the Claude-powered QA workflow (see ../README.md). Intentionally small: a couple of real flows, on purpose missing data-testid on 1-2 elements to test the locator-explorer's fallback-tier tagging.",
+  "description": "React+TypeScript SPA fixture for exercising the Claude-powered QA workflow. Upgraded from plain HTML/JS to support route-scoped locator filtering and import-graph analysis (see PROPOSED_DUMMY_APP_UPGRADE.md).",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "build": "vite build",
+    "start": "npm run build && node server.js",
+    "dev": "vite",
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "6.3.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.47.0"
+    "@playwright/test": "^1.47.0",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "@vitejs/plugin-react": "^4",
+    "typescript": "4.6.4",
+    "vite": "^4"
   }
 }

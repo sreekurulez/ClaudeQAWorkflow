@@ -1,0 +1,94 @@
+{
+  "entries": {
+    "US-002-E01": {
+      "caseId": "US-002-E01",
+      "modules": [
+        "dummy-app/server.js",
+        "dummy-app/src/components/Header.tsx",
+        "dummy-app/src/components/ProductList.tsx",
+        "dummy-app/src/pages/ItemsPage.tsx"
+      ],
+      "routes": [
+        "/items"
+      ],
+      "source": "derived",
+      "specPath": "dummy-app/tests/e2e/generated/us-002-e01-search-single-match.spec.ts",
+      "status": "generated"
+    },
+    "US-002-E02": {
+      "caseId": "US-002-E02",
+      "modules": [
+        "dummy-app/server.js",
+        "dummy-app/src/components/Header.tsx",
+        "dummy-app/src/components/ProductList.tsx",
+        "dummy-app/src/pages/ItemsPage.tsx"
+      ],
+      "routes": [
+        "/items"
+      ],
+      "source": "derived",
+      "specPath": "dummy-app/tests/e2e/generated/us-002-e02-clear-search-restores-list.spec.ts",
+      "status": "generated"
+    },
+    "US-002-E03": {
+      "caseId": "US-002-E03",
+      "modules": [
+        "dummy-app/server.js",
+        "dummy-app/src/components/Header.tsx",
+        "dummy-app/src/components/ProductList.tsx",
+        "dummy-app/src/pages/ItemsPage.tsx"
+      ],
+      "routes": [
+        "/items"
+      ],
+      "source": "derived",
+      "specPath": "dummy-app/tests/e2e/generated/us-002-e03-search-no-match.spec.ts",
+      "status": "generated"
+    },
+    "US-002-E04": {
+      "caseId": "US-002-E04",
+      "modules": [
+        "dummy-app/server.js",
+        "dummy-app/src/components/Header.tsx",
+        "dummy-app/src/components/ProductList.tsx",
+        "dummy-app/src/pages/ItemsPage.tsx"
+      ],
+      "routes": [
+        "/items"
+      ],
+      "source": "derived",
+      "specPath": "dummy-app/tests/e2e/generated/us-002-e04-search-url-encoded-term.spec.ts",
+      "status": "generated"
+    },
+    "US-002-E05": {
+      "caseId": "US-002-E05",
+      "modules": [
+        "dummy-app/server.js",
+        "dummy-app/src/components/Header.tsx",
+        "dummy-app/src/components/ProductList.tsx",
+        "dummy-app/src/pages/ItemsPage.tsx"
+      ],
+      "routes": [
+        "/items"
+      ],
+      "source": "derived",
+      "specPath": "dummy-app/tests/e2e/generated/us-002-e05-add-item-with-active-search.spec.ts",
+      "status": "generated"
+    },
+    "US-002-E06": {
+      "caseId": "US-002-E06",
+      "modules": [
+        "dummy-app/server.js",
+        "dummy-app/src/components/Header.tsx",
+        "dummy-app/src/components/ProductList.tsx",
+        "dummy-app/src/pages/ItemsPage.tsx"
+      ],
+      "routes": [
+        "/items"
+      ],
+      "source": "derived",
+      "specPath": "dummy-app/tests/e2e/generated/us-002-e06-sort-persists-across-search.spec.ts",
+      "status": "generated"
+    }
+  }
+}

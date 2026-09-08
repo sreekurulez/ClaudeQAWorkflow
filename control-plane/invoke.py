@@ -89,6 +89,8 @@ def invoke(
     adapter = get_adapter(config.get("adapter", "claude"))
     max_concurrent = config.get("budget", {}).get("max_concurrent_invocations") or 1
 
+    prompt_chars = len(prompt)  # deterministic, always available — see ledger.record's docstring
+
     start = time.monotonic()
     raw = _run_adapter_bounded(
         adapter, role=role, prompt=prompt, cwd=cwd, timeout_s=timeout_s, max_concurrent=max_concurrent
@@ -98,7 +100,7 @@ def invoke(
     if raw.timed_out:
         ledger.record(
             task_id=task_id, role=role, phase=phase, attempt=attempt,
-            duration_s=duration_s, exit_code=124, status="blocked",
+            duration_s=duration_s, exit_code=124, status="blocked", prompt_chars=prompt_chars,
         )
         raise InvocationBlocked(f"{role} timed out after {timeout_s}s")
 
@@ -115,6 +117,7 @@ def invoke(
         ledger.record(
             task_id=task_id, role=role, phase=phase, attempt=attempt,
             duration_s=duration_s, exit_code=raw.exit_code, status="repair_attempted",
+            prompt_chars=prompt_chars, **_extract_usage(raw.stdout),
         )
         repair_prompt = _repair_prompt(raw.stdout, original_error)
         repair_start = time.monotonic()
@@ -136,6 +139,7 @@ def invoke(
         ledger.record(
             task_id=task_id, role=role, phase=phase, attempt=attempt,
             duration_s=duration_s, exit_code=raw.exit_code, status="failed",
+            prompt_chars=prompt_chars, **_extract_usage(raw.stdout),
         )
         detail = (
             f"{original_error} (after one repair attempt: {repair_error})"
@@ -153,6 +157,7 @@ def invoke(
         ledger.record(
             task_id=task_id, role=role, phase=phase, attempt=attempt,
             duration_s=duration_s, exit_code=raw.exit_code, status="failed",
+            prompt_chars=prompt_chars, **_extract_usage(raw.stdout),
         )
         raise InvocationBlocked(f"{role} schema-invalid: {exc}", envelope=envelope) from exc
 
@@ -160,6 +165,7 @@ def invoke(
         task_id=task_id, role=role, phase=phase, attempt=attempt,
         duration_s=duration_s, exit_code=raw.exit_code, status=envelope["status"],
         verdict=envelope.get("verdict"), tokens=envelope.get("metrics", {}).get("tokens"),
+        prompt_chars=prompt_chars, **_extract_usage(raw.stdout),
     )
     return envelope
 
@@ -209,6 +215,36 @@ def _strip_fence(text: str) -> str:
     if first_newline != -1 and body[:first_newline].strip().isalpha():
         body = body[first_newline + 1 :]  # drop a language tag line, e.g. "json"
     return body.strip()
+
+
+def _extract_usage(stdout: str) -> dict[str, Any]:
+    """Pulls the CLI wrapper's own real cost/token accounting out of raw stdout, independent of
+    whether the model's own envelope inside it ever parses. Verified against a live
+    `claude -p --output-format json` call (not assumed): the wrapper's top-level fields include
+    `total_cost_usd` and a `usage` object with `input_tokens`/`output_tokens`/
+    `cache_read_input_tokens`/`cache_creation_input_tokens`, plus `num_turns`. Best-effort: on
+    any malformed/missing stdout, returns all-None rather than raising — this must never be why
+    a ledger.record() call fails, since a failed call is exactly when this data matters most.
+    """
+    empty = {
+        "cost_usd": None, "input_tokens": None, "output_tokens": None,
+        "cache_read_input_tokens": None, "cache_creation_input_tokens": None, "num_turns": None,
+    }
+    try:
+        cli_wrapper = json.loads(stdout)
+    except json.JSONDecodeError:
+        return empty
+    if not isinstance(cli_wrapper, dict):
+        return empty
+    usage = cli_wrapper.get("usage") or {}
+    return {
+        "cost_usd": cli_wrapper.get("total_cost_usd"),
+        "input_tokens": usage.get("input_tokens"),
+        "output_tokens": usage.get("output_tokens"),
+        "cache_read_input_tokens": usage.get("cache_read_input_tokens"),
+        "cache_creation_input_tokens": usage.get("cache_creation_input_tokens"),
+        "num_turns": cli_wrapper.get("num_turns"),
+    }
 
 
 def _parse_envelope(stdout: str) -> tuple[dict[str, Any] | None, str | None]:

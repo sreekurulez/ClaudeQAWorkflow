@@ -15,13 +15,24 @@ import json
 import sys
 from pathlib import Path
 
+import browser_crawler
 import executor
 import heal_loop
 import manifest
 import testability_check
+import traceability
 from gates.qa_gate import decide
 from invoke import InvocationBlocked, invoke
-from util import ROOT, STATE_DIR, hash_files, load_json, load_project_config, task_state_dir, write_json
+from util import (
+    ROOT,
+    STATE_DIR,
+    hash_files,
+    load_json,
+    load_project_config,
+    project_context_block,
+    task_state_dir,
+    write_json,
+)
 
 PHASES = ["locate", "plan", "generate", "execute", "review"]
 
@@ -44,12 +55,29 @@ def phase_artifact_path(task_id: str, phase: str) -> Path:
     return task_state_dir(task_id) / f"{phase}.json"
 
 
+def _truncate(text: str, *, label: str) -> str:
+    """Caps embedded prompt content at _MAX_EMBED_CHARS. Loud, not silent (IMPLEMENTATION_
+    STRATEGY.md §0/§8): a cut here used to just append '... <truncated>' with no warning —
+    on a small file nothing ever got cut, so this was invisible until a real, larger app hit it,
+    at which point an AI role would silently plan/generate/review against a half-file with no
+    one able to tell "it worked" from "the cut-off hid the problem." Now it says so on stderr,
+    naming exactly what was cut and by how much."""
+    if len(text) <= _MAX_EMBED_CHARS:
+        return text
+    dropped = len(text) - _MAX_EMBED_CHARS
+    print(
+        f"orchestrator: TRUNCATED {label} — {len(text)} chars exceeds the "
+        f"{_MAX_EMBED_CHARS}-char prompt-embed cap, {dropped} chars dropped. The AI role "
+        "receiving this prompt is working from a PARTIAL file, not the whole thing.",
+        file=sys.stderr,
+    )
+    return text[:_MAX_EMBED_CHARS] + "\n... <truncated>"
+
+
 def _artifact_block(path: Path, label: str) -> str:
     if not path.is_file():
         return f"{label}: (not present)"
-    text = path.read_text(encoding="utf-8")
-    if len(text) > _MAX_EMBED_CHARS:
-        text = text[:_MAX_EMBED_CHARS] + "\n... <truncated>"
+    text = _truncate(path.read_text(encoding="utf-8"), label=label)
     return f"{label}:\n{text}"
 
 
@@ -63,10 +91,47 @@ def _changed_files_block(changed_files: list[str]) -> str:
             text = path.read_text(encoding="utf-8")
         except OSError as exc:
             text = f"<< could not read: {exc} >>"
-        if len(text) > _MAX_EMBED_CHARS:
-            text = text[:_MAX_EMBED_CHARS] + "\n... <truncated>"
+        else:
+            text = _truncate(text, label=f)
         parts.append(f"--- {f} ---\n{text}")
     return "\n\n".join(parts)
+
+
+def _locator_map_block(routes: list[str] | None) -> str:
+    """IMPLEMENTATION_STRATEGY.md §5/Stage 9 — page-scoped prompt filtering. `routes=None` or
+    `[]` means fail open (§5's own correction of an earlier overstatement: a hand-maintained
+    route map going stale is a real, silent risk) — send the FULL map, exactly as before this
+    stage existed, and say so on stderr so an operator can tell "filtering worked" from
+    "filtering never engaged" rather than the two looking identical in the prompt itself."""
+    if not LOCATOR_MAP_PATH.is_file():
+        return "state/locator-map.json: (not present)"
+    full_map = load_json(LOCATOR_MAP_PATH)
+    if not routes:
+        print(
+            "orchestrator: locator map filter did not match any route — sending the FULL "
+            f"locator map ({len(full_map)} routes) rather than guessing at an empty subset.",
+            file=sys.stderr,
+        )
+        filtered = full_map
+    else:
+        filtered = [r for r in full_map if r["route"] in routes]
+        excluded = len(full_map) - len(filtered)
+        if excluded:
+            print(
+                f"orchestrator: locator map filtered to {len(filtered)}/{len(full_map)} routes "
+                f"({routes}) — {excluded} route(s) excluded from this prompt.",
+                file=sys.stderr,
+            )
+        if not filtered:
+            # Matched routes but none of them exist in the current map (stale route names?) —
+            # fail open rather than send an empty, silently-useless block.
+            print(
+                "orchestrator: matched routes not found in the current locator map — sending "
+                "the FULL map instead of an empty one.",
+                file=sys.stderr,
+            )
+            filtered = full_map
+    return "state/locator-map.json (page-scoped):\n" + json.dumps(filtered, indent=2)
 
 
 def _build_prompt(
@@ -84,10 +149,15 @@ def _build_prompt(
     `plan_override` is used on a generate-phase resume (see `_run_generate_phase`): only the
     still-pending cases are sent, not the full plan, so a crash-and-restart doesn't re-ask the
     generator to redo work `state/<task-id>/generate.manifest.json` already has recorded."""
+    context_block = project_context_block()
+    project = load_project_config()
+    route_source_files = project.get("route_source_files", {})
     if phase == "plan":
+        routes = traceability.resolve_routes_for_files(changed_files or [], route_source_files)
         return "\n\n".join([
+            context_block,
             _changed_files_block(changed_files or []),
-            _artifact_block(LOCATOR_MAP_PATH, "state/locator-map.json"),
+            _locator_map_block(routes),
         ])
     if phase == "generate":
         if plan_override is not None:
@@ -96,11 +166,32 @@ def _build_prompt(
                 "already generated per state/<task-id>/generate.manifest.json and must not be "
                 "redone):\n" + json.dumps(plan_override, indent=2)
             )
+            cases_for_routes = plan_override
         else:
             plan_block = _artifact_block(phase_artifact_path(task_id, "plan"), "plan.json")
-        return "\n\n".join([plan_block, _artifact_block(LOCATOR_MAP_PATH, "state/locator-map.json")])
+            cases_for_routes = load_json(phase_artifact_path(task_id, "plan")) if phase_artifact_path(task_id, "plan").is_file() else []
+        locator_map = load_json(LOCATOR_MAP_PATH) if LOCATOR_MAP_PATH.is_file() else []
+        routes: list[str] = []
+        any_case_unmatched = False
+        for case in cases_for_routes:
+            case_routes = traceability.derive_routes_for_case(case, locator_map)
+            if not case_routes:
+                # Real risk, found by running this against stage1-quality's actual 20-case plan
+                # (IMPLEMENTATION_STRATEGY.md §9): narrowing to the union of MATCHED cases'
+                # routes would silently strip locator context from the cases that didn't match
+                # anything (Stage 8's "unmapped" cases) — exactly the ones that need it most,
+                # since they still have to be generated. One unmatched case fails the whole
+                # batch open, not just its own share of it.
+                any_case_unmatched = True
+            for r in case_routes:
+                if r not in routes:
+                    routes.append(r)
+        if any_case_unmatched:
+            routes = []
+        return "\n\n".join([context_block, plan_block, _locator_map_block(routes)])
     if phase == "review":
         return "\n\n".join([
+            context_block,
             _artifact_block(phase_artifact_path(task_id, "plan"), "plan.json"),
             _artifact_block(phase_artifact_path(task_id, "generate"), "generate.json"),
             _artifact_block(phase_artifact_path(task_id, "heal"), "heal loop result"),
@@ -111,10 +202,21 @@ def _build_prompt(
 
 
 def locate(cwd: str) -> dict | None:
-    """Deterministic testability check (testability_check.py, LP1) → qa-locator-explorer →
-    state/locator-map.json. Skips the LLM call when the scanned source hasn't changed since the
-    last locate — a coarse, whole-app version of the per-route delta trigger item 12 defers;
-    good enough for this POC's one-shot full-crawl mode (see README's Layout section)."""
+    """Browser-based crawl (browser_crawler.py + crawl.js, IMPLEMENTATION_STRATEGY.md §4/Stage 7
+    "Option B") → qa-locator-explorer → state/locator-map.json. Skips both the crawl AND the LLM
+    call when the scanned source hasn't changed since the last locate — a coarse, whole-app
+    version of the per-route delta trigger item 12 defers; good enough for this POC's one-shot
+    full-crawl mode (see README's Layout section). The staleness check still hashes source
+    files, not crawl output — a real browser launch is far more expensive than hashing files, so
+    skipping it when nothing changed matters even more here than it did for the old
+    testability_check.py-based scan.
+
+    Supersedes the source-scanning approach (testability_check.py): reading a real, rendered
+    page gives exact route attribution for free (we navigated there, so what we found IS on that
+    route — no AI re-derivation needed for that part), the browser's own real accessibility
+    computation instead of an inferred one, and dynamically-created elements are just elements
+    (no more JS-heuristic guessing). testability_check.py is kept for now as a fallback/reference
+    (see its own module docstring) but is no longer in locate()'s critical path."""
     scan_paths = testability_check._default_paths()
     current_hash = hash_files(scan_paths)
     if (
@@ -124,13 +226,16 @@ def locate(cwd: str) -> dict | None:
     ):
         return None  # up to date, nothing to do
 
-    facts_json = testability_check.facts_to_json(testability_check.scan_paths(scan_paths))
+    facts_json = browser_crawler.facts_to_json(browser_crawler.crawl())
     prompt = (
-        "Testability fact list (from a deterministic grep/AST check the control plane ran — "
-        "control-plane/testability_check.py):\n"
+        f"{project_context_block()}\n\n"
+        "Testability fact list (from a real browser crawl the control plane ran — "
+        "control-plane/browser_crawler.py + crawl.js — NOT a source-code scan; every element "
+        "listed was actually observed, rendered, on the named route):\n"
         f"{facts_json}\n\n"
-        "Crawl dummy-app/public/ source to confirm/interpret these facts and produce the "
-        "locator map."
+        "Rank/interpret these facts (confidence tier per element) and produce the locator map. "
+        "This fact list is already organized by route and already comprehensive — no need to "
+        "read application source yourself to fill gaps."
     )
     envelope = invoke(task_id="_locator", role="qa-locator-explorer", phase="locate", prompt=prompt, cwd=cwd)
     if envelope["status"] == "completed":
@@ -167,6 +272,7 @@ def _run_generate_phase(task_id: str, cwd: str) -> dict:
         # Everything in the current plan is already recorded done — no LLM call needed at all.
         result = list(done_entries.values())
         write_json(phase_artifact_path(task_id, "generate"), result)
+        traceability.record_generate(plan, result)
         return {"status": "completed", "result": result}
 
     plan_override = [c for c in plan if c["caseId"] in pending_ids] if done_entries else None
@@ -178,8 +284,10 @@ def _run_generate_phase(task_id: str, cwd: str) -> dict:
         manifest.upsert(task_id, "generate", input_hash=plan_hash, case_id=entry["caseId"], entry=entry)
 
     merged = {**done_entries, **{e["caseId"]: e for e in new_entries}}
-    write_json(phase_artifact_path(task_id, "generate"), list(merged.values()))
-    return {**envelope, "result": list(merged.values())}
+    result = list(merged.values())
+    write_json(phase_artifact_path(task_id, "generate"), result)
+    traceability.record_generate(plan, result)
+    return {**envelope, "result": result}
 
 
 def run_phase(

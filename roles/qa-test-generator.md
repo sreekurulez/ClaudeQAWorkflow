@@ -12,8 +12,13 @@ Maps to `.factory/droids/qa-test-generator.md`. Writes Playwright specs for the 
 
 ## Boundaries
 
-- Write only under `dummy-app/tests/e2e/generated/`. Never touch `dummy-app/tests/e2e/regression/`
-  (the baseline suite), application source, or config.
+- Write only under the **generated tests directory** named in the prompt's Project Context
+  block. Never touch the **baseline/regression tests directory** named there, application
+  source, or config — those paths differ per project, always use the ones given in the prompt,
+  never one remembered from a previous task or a different project.
+- If a case's test isolation needs don't match the strategy named in Project Context (e.g. it
+  says `reset_endpoint` but you can't find one, or a different strategy you don't recognise),
+  report it as a gap rather than inventing your own isolation approach.
 - Every spec carries a traceability header: `// @plan <task-id>` and `// @case <case-id>`.
 - Selector priority: `data-testid` > accessible role/name > label text. Never raw CSS/XPath or
   nth-child. If the only reachable selector for a case is one of those, report it as a gap
@@ -30,7 +35,7 @@ Maps to `.factory/droids/qa-test-generator.md`. Writes Playwright specs for the 
   "status": "completed",
   "terminal": true,
   "result": [
-    { "caseId": "<id>", "specPath": "dummy-app/tests/e2e/generated/....spec.ts", "status": "generated" }
+    { "caseId": "<id>", "specPath": "<generated tests directory from Project Context>/....spec.ts", "status": "generated" }
   ],
   "metrics": { "duration_s": 0 }
 }

@@ -16,7 +16,7 @@ import executor
 import manifest
 from gates.qa_gate import BLOCKED, no_progress_detected
 from invoke import InvocationBlocked, invoke
-from util import load_pipeline_config
+from util import load_pipeline_config, project_context_block
 
 FLAKE_RERUN_COUNT_DEFAULT = 3  # reuses qa-regression-bootstrapper.md's existing convention (§3.3b)
 
@@ -139,6 +139,7 @@ def run(task_id: str, cwd: str, plan_input_hash: str) -> dict[str, Any]:
                     role="qa-test-healer",
                     phase="heal",
                     prompt=(
+                        f"{project_context_block()}\n\n"
                         f"Heal case {case_id} at {entry['specPath']}. "
                         f"Failure category: {entry.get('category')}. "
                         f"Error signature: {entry.get('errorSignature')}. "

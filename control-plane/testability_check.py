@@ -7,10 +7,16 @@ reading source itself.
 
 Scope, deliberately narrow for this POC: static HTML interactive elements (input/button/select/
 textarea/a[href]), plus a best-effort heuristic for elements created dynamically via
-`document.createElement(...)` in JS (dummy-app's delete button is exactly this case — see
-dummy-app/public/app.js's own comment). Not a full AST/DOM analysis; a real port should replace
-the JS heuristic with an actual parser (e.g. an acorn/esprima AST walk) if the target app's
-dynamic-element surface grows beyond a handful of cases.
+`document.createElement(...)` in JS. Not a full AST/DOM analysis; a real port should replace the
+JS heuristic with an actual parser (e.g. an acorn/esprima AST walk), and — see
+IMPLEMENTATION_STRATEGY.md — add real JSX/TSX support (or, per that doc's Option B, replace
+source scanning with a browser-based accessibility-tree snapshot instead).
+
+**No JSX/TSX support exists yet.** `dummy-app` was rebuilt as a React/TypeScript SPA
+(`dummy-app/src/**/*.tsx`); this scanner cannot read those files. Rather than silently returning
+an empty (or, worse, stale) result, `scan_paths()` reports every file it was asked to scan but
+couldn't handle, loudly, on stderr — see `_UNHANDLED_WARNING` below. Do not treat a quiet, empty
+`locate` result as confirmation the app has no testable elements; check stderr first.
 
 Output is a flat fact list per source file — NOT a locator-map. It says nothing about routes or
 confidence tiers; that interpretation is qa-locator-explorer's job (docs §1.4/G4: "you rank/
@@ -26,7 +32,7 @@ from dataclasses import asdict, dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
 
-from util import ROOT, hash_files
+from util import ROOT, hash_files, load_project_config
 
 INTERACTIVE_TAGS = {"input", "button", "select", "textarea", "a"}
 
@@ -158,6 +164,13 @@ def scan_js(path: Path) -> list[ElementFact]:
     return facts
 
 
+_UNHANDLED_WARNING = (
+    "testability_check: cannot scan {path} — no support for '{suffix}' files yet "
+    "(only .html/.htm/.js are handled). This file's elements are MISSING from the fact list, "
+    "not confirmed absent. See testability_check.py's module docstring."
+)
+
+
 def scan_paths(paths: list[Path]) -> list[FileFacts]:
     results: list[FileFacts] = []
     for path in paths:
@@ -166,6 +179,14 @@ def scan_paths(paths: list[Path]) -> list[FileFacts]:
         elif path.suffix == ".js":
             elements = scan_js(path)
         else:
+            # Loud, not silent (docs §"fails quietly"): an unrecognised extension used to be a
+            # bare `continue` here, which is exactly how this script ended up scanning
+            # dummy-app's old, no-longer-served public/app.js while silently ignoring the real
+            # dummy-app/src/**/*.tsx source — a valid-looking but wrong result, with no warning.
+            print(
+                _UNHANDLED_WARNING.format(path=path, suffix=path.suffix or "<no extension>"),
+                file=sys.stderr,
+            )
             continue
         results.append(
             FileFacts(
@@ -181,20 +202,39 @@ def facts_to_json(facts: list[FileFacts]) -> str:
     return json.dumps([asdict(f) for f in facts], indent=2)
 
 
+_SCANNABLE_SOURCE_EXTS = (".html", ".htm", ".js", ".jsx", ".ts", ".tsx")
+
+
 def _default_paths() -> list[Path]:
-    public_dir = ROOT / "dummy-app" / "public"
-    return sorted(p for p in public_dir.glob("**/*") if p.suffix in (".html", ".htm", ".js"))
+    """Reads config/project.json's app_source_dir (IMPLEMENTATION_STRATEGY.md §7.3 — the same
+    fix as the role-file path injection, applied to this deterministic script too) rather than
+    hardcoding a path. dummy-app's actual UI source is dummy-app/src/**/*.tsx (a React SPA) —
+    NOT dummy-app/public/, which server.js stopped serving once the app was rebuilt (it now
+    serves the built dist/ output instead). This deliberately globs a wider set of frontend
+    source extensions than scan_paths() can currently handle, so an unparseable file (.tsx,
+    .jsx, .ts) reaches scan_paths() and gets a loud warning — instead of being silently dropped
+    here where no warning could ever fire."""
+    project = load_project_config()
+    src_dir = ROOT / project.get("app_source_dir", "dummy-app/src")
+    return sorted(p for p in src_dir.glob("**/*") if p.suffix in _SCANNABLE_SOURCE_EXTS)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "paths", nargs="*", type=Path,
-        help="Files to scan (default: dummy-app/public/**/*.{html,js})",
+        help="Files to scan (default: config/project.json's app_source_dir, all recognised extensions)",
     )
     args = parser.parse_args(argv)
     paths = args.paths or _default_paths()
     facts = scan_paths(paths)
+    if paths and not facts:
+        print(
+            f"testability_check: {len(paths)} file(s) were scanned but ZERO produced any "
+            "fact list — likely all unsupported (see warnings above). Do not treat this as "
+            "\"the app has no testable elements.\"",
+            file=sys.stderr,
+        )
     json.dump([asdict(f) for f in facts], sys.stdout, indent=2)
     sys.stdout.write("\n")
     return 0

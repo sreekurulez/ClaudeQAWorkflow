@@ -17,12 +17,15 @@ silent correctness failure instead of a visible one (docs §1.3/Q3, §3.2/QP7).
 ## Inputs
 
 - The failing case's spec path and error signature (given in the prompt)
-- `dummy-app/tests/e2e/generated/` — the spec you may edit
+- The prompt's Project Context block, naming the generated-tests directory the spec you're
+  fixing lives in, and the baseline/regression directory you must never touch
 
 ## Boundaries
 
-- Write only inside `dummy-app/tests/e2e/generated/`. Never touch application source, the
-  baseline suite, or config.
+- Write only inside the **generated tests directory** named in Project Context — in practice,
+  only the one spec path given to you in this prompt. Never touch application source, the
+  **baseline/regression tests directory** named in Project Context, or config. These paths
+  differ per project; always use the ones given in the prompt.
 - If the failure looks like a genuine product defect rather than a test defect, say so and
   escalate — do not force a pass.
 

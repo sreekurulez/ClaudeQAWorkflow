@@ -20,6 +20,14 @@ write test code, decide if a failure is a real bug vs. a broken test, judge over
 output is well-formed, catching a cheating fix — is done by plain, deterministic Python code
 that never changes its mind.** That split is the entire point of the architecture.
 
+There's also a second, alternate track alongside the browser-based (Playwright/E2E) one
+described below: generating and running **component-level tests** (Jest + React Testing
+Library) against a component in isolation instead of a whole running app. Proven against a real
+external repo (see `IMPLEMENTATION_STRATEGY.md`'s Stage 3) — same `qa-test-planner`/
+`qa-test-generator` roles, unchanged, just a different executor (`executor.py::run_jest()`
+instead of `run_playwright()`). Everything below describes the E2E track by default; where the
+component track differs, it's called out explicitly.
+
 There's a "dummy app" (`dummy-app/`) included purely as something to test against — a tiny
 login/items web app with a couple of deliberately-planted quirks (an element with no stable
 selector, a seeded bug) used to prove the safety mechanisms actually catch what they're supposed
@@ -33,7 +41,7 @@ This is the single most important thing to understand before reading any code.
 
 | Kind | What it means | Examples in this repo |
 |---|---|---|
-| **Deterministic** | Plain Python (or a subprocess like Playwright). Same input → same output, every time. No AI involved. Fast, free, fully predictable. | `executor.py` (runs Playwright, reads its JSON report), `manifest.py` (checkpoint bookkeeping), `ledger.py` (a log file), `gates/qa_gate.py` (PASS/REFACTOR/BLOCKED decision), `diff_guard.py` (checks if an assertion line changed), `testability_check.py` (scans HTML/JS for elements), `invoke.py`'s JSON-parsing/repair/concurrency-limiting logic |
+| **Deterministic** | Plain Python (or a subprocess like Playwright, or a Node/Playwright browser-automation script). Same input → same output, every time. No AI involved. Fast, free, fully predictable. | `executor.py` (runs Playwright *or* Jest, reads the JSON report either produces), `browser_crawler.py` + `crawl.js` (crawls the running app in a real browser to find elements — see §4.1), `traceability.py` (records which test cases touch which source files/modules), `manifest.py` (checkpoint bookkeeping), `ledger.py` (a log file), `gates/qa_gate.py` (PASS/REFACTOR/BLOCKED decision), `diff_guard.py` (checks if an assertion line changed), `invoke.py`'s JSON-parsing/repair/concurrency-limiting logic |
 | **Non-deterministic** | A real call out to the `claude` CLI (an AI model). Same input can produce a *different* (though hopefully similarly-good) answer each time. Costs money/tokens, takes seconds-to-minutes, and its output must always be double-checked by deterministic code before being trusted. | Every one of the 6 "roles" in `roles/*.md` — see the table in §7 |
 
 The rule this whole codebase follows: **the AI never gets to be the referee of its own work.**
@@ -67,7 +75,7 @@ Here is exactly what happens, in order, when you run the command above. "🤖" m
 call; "⚙️" marks plain deterministic code.
 
 ```
-  ⚙️  1. locate    →  scan dummy-app's HTML/JS for elements  →  🤖 qa-locator-explorer
+  ⚙️  1. locate    →  crawl the running app in a real browser for elements  →  🤖 qa-locator-explorer
                        (only if the app's source changed since last time — otherwise skipped
                         entirely, no AI call, see §4.1)
 
@@ -100,20 +108,43 @@ call; "⚙️" marks plain deterministic code.
 
 Before planning or generating anything, the system needs to know: which elements on the page
 have a reliable way to click/fill them, and which don't? Rather than asking the AI to figure
-this out by reading every file (slow, expensive, inconsistent), a deterministic script
-(`testability_check.py`) scans the app's HTML and JavaScript first and hands the AI a plain
-fact list — the AI's job is only to *interpret and rank* those facts (e.g. "this button has no
-ID, but it does have visible text 'Delete', so use that as a fallback"), never to *find* them
-from scratch.
+this out by reading every source file (slow, expensive, and it can't see elements a page only
+creates dynamically in JavaScript), a deterministic script opens the *real, running app* in a
+real headless browser first and hands the AI a plain fact list — the AI's job is only to
+*interpret and rank* those facts (e.g. "this button has no ID, but it does have visible text
+'Delete', so use that as a fallback"), never to *find* them from scratch.
+
+Concretely: `browser_crawler.py` starts the app if it isn't already running, then hands off to
+`crawl.js` (Node/Playwright — driving a real browser needs a real browser-automation engine,
+which is why this one piece isn't Python). For each page listed in `config/project.json`'s
+`crawl_pages`: log in once if the page needs authentication (`config`'s `auth` block says how —
+see §8), then read every interactive element's tag, computed accessible role, computed
+accessible name, `data-testid` (if any), and real visibility. **Important, found by actually
+building this:** once logged in, every later page is reached by clicking a real in-app
+navigation link, never by loading a fresh URL — this specific app's login state is
+kept only in memory and does not survive a full page reload, so a fresh URL load would silently
+bounce back to the login page and get treated as if it were the destination page. Loading a
+fresh URL is only safe for the very first, not-yet-authenticated page.
 
 The result is `state/locator-map.json` — every interactive element, tagged as:
 - `stable-testid` — has a real `data-testid`, safest to use
 - `role-fallback` — no ID, but has a stable accessible name (e.g. button text) to fall back on
-- `flagged-unstable` — no reliable way to target it at all; anything relying on it is a known gap
+- `flagged-unstable` — no reliable way to target it at all (or its name is ambiguous — e.g. two
+  "Delete" buttons on the same page with no way to tell them apart); anything relying on it is a
+  known gap
 
-This whole stage is **skipped entirely** (no AI call at all) if the app's source hasn't changed
-since the last time it ran — a hash of the scanned files is kept in `state/locator-map.hash` and
-compared before doing anything.
+This whole stage is **skipped entirely** (no AI call, and no browser launch — a real browser is
+far more expensive to start than hashing a few files) if the app's source hasn't changed since
+the last time it ran — a hash of the relevant source files is kept in `state/locator-map.hash`
+and compared before doing anything.
+
+**Known, honest limitation:** the crawler only sees what's on screen in the state it lands on
+after login/navigation. A confirmation dialog that only appears after clicking something, a
+list that's only populated after real data exists, an error message that only shows after a
+failed submission — none of these are visible to a one-shot crawl of each page's *default*
+state. Elements like that simply won't appear in the fact list, and any planned test case that
+needs them will (correctly) show up as "unmapped" rather than a wrong guess — see §4.4's
+traceability report for a live example of exactly this.
 
 ### 4.2 The "heal loop" in detail (this is where most of the safety logic lives)
 
@@ -144,6 +175,62 @@ straight to an AI and say "fix this." Instead:
    `config/pipeline.json`'s `max_heal_cycles` (currently 2). If the set of still-failing cases
    stops shrinking between cycles, a circuit breaker trips immediately (it does not wait for the
    cycle count to run out) and the whole thing is marked `BLOCKED`.
+
+### 4.3 Not sending the AI everything: page-scoped filtering
+
+`state/locator-map.json` can hold every route's elements — every page's clickable things, all
+at once. Sending that whole thing on *every* `plan` and `generate` call wastes context on
+elements the current task has nothing to do with, and on a real, larger app than the one this
+was built against, that adds up.
+
+So `orchestrator.py` filters the locator map down before embedding it in a prompt:
+- For `plan`: which routes do the **changed files** belong to (`config/project.json`'s
+  `route_source_files` — a plain, hand-maintained map, deliberately not a dependency-graph
+  tool; see `IMPLEMENTATION_STRATEGY.md` §5 for why one wasn't built)?
+- For `generate`: which routes do the **plan's own cases** reference (matched against the
+  locator map's `testId`/`name` fields)?
+
+**The one rule that matters more than the filtering itself: fail open, loudly.** If a changed
+file (or a case) doesn't match anything in the route map, the system does **not** narrow the
+prompt at all — it sends the full, unfiltered locator map and prints a warning to stderr saying
+so. A hand-maintained route map going stale silently is a real risk (someone adds a new
+component and forgets to add it to `route_source_files`), and the failure mode of under-sending
+context — the AI planning around selectors it was never told about — is worse than the failure
+mode of over-sending it. Even a *partial* miss fails the whole batch open: if a batch of cases
+being generated together has even one case that couldn't be matched to any route, the entire
+batch gets the full map, not just that one case's fair share of it — narrowing only the matched
+cases' share would have silently starved the very cases most likely to need help.
+
+Measured, not guessed: filtering the same real prompt down to one matched route instead of five
+cut its size by half (a real, repeatable ~53% drop in `state/ledger.jsonl`'s `prompt_chars`
+field for byte-identical input — see `IMPLEMENTATION_STRATEGY.md` §5 for the exact numbers).
+
+### 4.4 Traceability: which files does each test case actually touch?
+
+A separate, smaller question from locating elements: once a test case exists, which parts of
+the app's *source* does it actually exercise? `control-plane/traceability.py` keeps
+`state/traceability.json` — one entry per case, recorded automatically the moment a case is
+generated, never written by the AI.
+
+Two tiers, in increasing trust:
+- **"derived"** — worked out from the case's own selectors: which crawled route has an element
+  matching that selector (§4.1's locator map), then which source files `config/project.json`'s
+  `route_source_files` says that route belongs to. Available immediately, at generate time, but
+  only as good as that config's own accuracy — and it has a real, found-not-assumed limit: the
+  planner and the locator-explorer are two *separate* AI calls, and for an element with no
+  `data-testid` at all, each is free to invent its own name for it (one real case: the planner
+  called a button `sort-toggle-button`, the locator map called the same button
+  `sort-az-button`). Cases like that come back "unmapped" rather than silently guessed at.
+- **"measured"** — real coverage data from an actual test run (Jest's own `--collectCoverage`,
+  for the component-test track). Ground truth, available only after a case has actually run at
+  least once, and it always wins over a "derived" entry once it exists.
+
+What this is for: real, concrete questions a project like this needs answered, not just data
+for its own sake — e.g. `traceability.py`'s own report showed a real run where one whole page
+(`ProfilePage.tsx`) had **zero** test cases touching it at all, and five planned cases were
+never generated in the first place because of a real app defect (an "Add to Cart" button that
+turned out to be unreachable from any page) — the kind of gap that's easy to miss without an
+index like this to ask.
 
 ---
 
@@ -234,7 +321,7 @@ one JSON shape back." Here's the cast of characters:
 
 | Role (file in `roles/`) | What it's given | What it must write back | Can it edit files? |
 |---|---|---|---|
-| **qa-locator-explorer** | A deterministic fact list of every interactive element found in the app's HTML/JS (see §4.1) | A locator map: each element tagged `stable-testid` / `role-fallback` / `flagged-unstable` | No — read-only |
+| **qa-locator-explorer** | A deterministic fact list of every interactive element found by crawling the running app in a real browser (see §4.1) | A locator map: each element tagged `stable-testid` / `role-fallback` / `flagged-unstable` | No — read-only |
 | **qa-test-planner** | The changed file(s)' full text, plus the current locator map | A list of test scenarios (`plan.json`) — priority, type, steps, expected result, which selectors it needs | No — read-only |
 | **qa-test-generator** | `plan.json` (or, on a resume, just the not-yet-done cases) plus the locator map | Real Playwright `.spec.ts` files written to `dummy-app/tests/e2e/generated/`, and a summary list (`generate.json`) of what it wrote or skipped | **Yes** — but only inside that one generated-tests folder |
 | **qa-failure-triage** | One failing test's case ID, file path, error message, and category | A single word: `test-defect`, `product-bug`, or `unclear` | No — read-only |
@@ -290,6 +377,12 @@ rather than relying on the AI to infer the full list from one example.
 
 ### `config/project.json` — "where things live"
 
+This file has grown a lot since the pipeline was first built — every field below was added to
+answer one specific question: *"how would this work on a second, different app?"* rather than
+hardcoding an answer into an AI role's instructions. Shown here trimmed of its explanatory
+`_comment` fields (the real file has one next to almost every section — read those for the
+full reasoning):
+
 ```json
 {
   "e2e_test_commands": ["npx playwright test"],
@@ -297,7 +390,27 @@ rather than relying on the AI to infer the full list from one example.
   "e2e_baseline_dir": "dummy-app/tests/e2e/regression",
   "e2e_results_path": "dummy-app/test-results/results.json",
   "locator_map_path": "state/locator-map.json",
-  "app_root": "dummy-app"
+  "app_root": "dummy-app",
+  "app_source_dir": "dummy-app/src",
+  "test_isolation": { "strategy": "reset_endpoint", "reset_call": "POST /api/__test__/reset" },
+  "auth": {
+    "strategy": "form_login", "login_route": "/login",
+    "email_testid": "login-email", "password_testid": "login-password",
+    "submit_testid": "login-submit",
+    "test_credentials": { "email": "user@example.com", "password": "password123" }
+  },
+  "base_url": "http://localhost:4000",
+  "crawl_pages": [
+    { "route": "/login", "requiresAuth": false },
+    { "route": "/items", "requiresAuth": true, "navLinkName": "Items" }
+  ],
+  "route_source_files": {
+    "/items": ["dummy-app/src/pages/ItemsPage.tsx", "dummy-app/server.js"]
+  },
+  "traceability_path": "state/traceability.json",
+  "component_test_app_root": "/Users/you/Projects/some-other-repo",
+  "component_test_command": ["npx react-scripts test"],
+  "component_test_results_path": "state/component-test-results.json"
 }
 ```
 
@@ -308,6 +421,13 @@ rather than relying on the AI to infer the full list from one example.
 | `e2e_results_path` | Where Playwright writes its JSON report after a run — `executor.py` reads this exact file. |
 | `locator_map_path` | Where the locator map (§4.1) is stored. |
 | `app_root` | The folder the app being tested lives in. |
+| `app_source_dir` | Where the app's actual UI source code lives — used by the (currently secondary, not in the critical path) source-scanning fallback, and as the fallback answer for "which folder can the AI read/write in" that the four role files reference instead of hardcoding a path themselves. |
+| `test_isolation` | How a generated test gets a clean slate. `"strategy": "reset_endpoint"` + `reset_call` for an app like this one that has a dedicated reset API; a real app usually won't have one — see `IMPLEMENTATION_STRATEGY.md` §7.1 for the alternative strategies this is designed to be extended to. |
+| `auth` | How a test (or the browser crawler, §4.1) establishes a logged-in session. `"strategy": "form_login"` fills the three named testids and submits — real credential *values* live here as plain fixture data for `dummy-app` since they're already public; a real project should point these at environment-variable names instead of committing real credentials. A real app behind external SSO would need a different strategy entirely — not yet built, see `IMPLEMENTATION_STRATEGY.md` §7.2/§2.2. |
+| `base_url` / `crawl_pages` | Where the app is actually served, and the explicit list of pages the browser crawler (§4.1) visits — deliberately a plain list, not something parsed out of a router config. `navLinkName` is the visible text of the in-app link used to reach that page (see §4.1 on why a fresh page load isn't safe once logged in). |
+| `route_source_files` | The page-scoped filtering (§4.3) and traceability (§4.4) map: which source files "belong" to each route. Plain, hand-maintained config — deliberately not a dependency-graph tool; see `IMPLEMENTATION_STRATEGY.md` §5 for why. |
+| `traceability_path` | Where `state/traceability.json` (§4.4) is stored. |
+| `component_test_app_root` / `component_test_command` / `component_test_results_path` | The component-test track's (§1) equivalent of `app_root`/`e2e_test_commands`/`e2e_results_path`. `component_test_app_root` is the one path in this whole file that's absolute rather than relative — the component-test target is typically a separate repo entirely, not a folder inside this one. |
 
 ### `config/pipeline.json` — "how cautious to be"
 
@@ -372,9 +492,12 @@ Plain-language meaning of each flag:
 ```
 state/
   ledger.jsonl              one line per AI call ever made — role, phase, duration,
-                             status, cost — an audit trail, never trusted for decisions
+                             status, real cost/tokens (not the AI's own self-report),
+                             prompt size — an audit trail, never trusted for decisions
   locator-map.json          the current locator map (§4.1)
   locator-map.hash          fingerprint used to decide whether locate() needs to re-run
+  traceability.json         which source files each test case actually touches (§4.4)
+  component-test-results.json   the component-test track's raw Jest JSON output
   <task-id>/
     plan.json                the planner's output
     generate.json            the generator's output (which specs it wrote or skipped)
@@ -418,6 +541,18 @@ is never silently reused.
   cases isn't shrinking between cycles, instead of waiting for the cycle-count cap to be hit.
 - **Quarantine** — setting aside a case that fails/passes inconsistently on identical code
   (flaky), so it's never mistakenly sent to the healer as if it were a real, fixable defect.
+- **Browser crawl** — how the locate stage finds elements: opening the real, running app in a
+  real headless browser and reading what's actually there, instead of parsing source files
+  (§4.1). Works the same way no matter what framework the app is built with.
+- **Traceability** — the recorded link between a test case and the source files it actually
+  touches (§4.4), kept in `state/traceability.json`, either worked out from selectors
+  ("derived") or measured from real test coverage ("measured").
+- **Page-scoped filtering** — sending the AI only the locator-map routes relevant to the current
+  task instead of every route in the app, with a hard "fail open" rule for anything it can't
+  confidently match (§4.3).
+- **Component-test track** — the alternate path (§1) that generates and runs Jest + React
+  Testing Library tests against one component in isolation, instead of a whole running app in a
+  browser. Same planner/generator roles, a different executor.
 
 ---
 
@@ -486,18 +621,42 @@ python3 run_all.py                       # all 7 scenarios
 python3 scenario_1_clean_pass.py         # or just one, while iterating
 ```
 
+**Running the newer deterministic pieces standalone** — none of these need an AI call:
+
+```bash
+cd control-plane
+python3 browser_crawler.py              # crawl the app, print the raw fact list to stdout
+python3 traceability.py                 # print the audit report — unmapped cases,
+                                         # modules with zero test coverage, cases never
+                                         # generated at all
+```
+
+**Running the component-test track** (§1) instead of the browser/E2E one — same phases, a
+different executor:
+
+```python
+import executor
+executor.run_jest(["SomeComponent.test"])       # run one spec by name pattern
+executor.run_jest(with_coverage=True)           # + collect real coverage for traceability.py
+print(executor.parse_jest_results())            # execute.schema.json-shaped results
+```
+
 ---
 
 ## 12. Where to look next
 
-- `README.md` — short project overview, file layout, and how to point this at a different app
-  (not just `dummy-app/`) or port it to Factory. This file (`HOW_IT_WORKS.md`) is the primary
-  reference for how the system actually works and how to operate it day to day.
-- `TODO.md` — a historical, dated log of every gap found and fixed while building this
-  (all items are done — it's a build diary, not an active task list), including several real
-  bugs discovered only by actually running the system live — genuinely useful reading for
-  understanding *why* certain things are built the way they are, not just *what* they do.
-- `tests/golden/README.md` — the seven acceptance scenarios that prove the safety mechanisms
-  actually work, and the runnable scripts that verify them.
-- `MIGRATION_TO_FACTORY.md` — what changes (and, more importantly, what *doesn't*) if this gets
-  ported to a different underlying agent runtime.
+This file (`HOW_IT_WORKS.md`) is the single source of truth for **how the system works today**
+and how to operate it. Every other root document has one clear job — this is the map:
+
+| Document | What it's for | Status |
+|---|---|---|
+| **`HOW_IT_WORKS.md`** (this file) | How it works + day-to-day operation | Current, authoritative |
+| `README.md` | Project overview, file layout, pointing at a new app, Factory-porting steps | Current |
+| **`IMPLEMENTATION_STRATEGY.md`** | The risk-ordered build plan, with a stage-by-stage record of what's done | **Every stage is done except one** — a real-environment access question that needs human/organisational input, not more building. Read this for the one open item and the full history of what was found and fixed along the way. |
+| `TODO.md` | Dated historical log of every gap found and fixed while building this so far | Historical build diary, not an active task list — all items done |
+| `PROPOSED_ENHANCEMENTS.md` | The original two-change proposal (user-story planning, indexing) | **Superseded** by `IMPLEMENTATION_STRATEGY.md` — kept for the reasoning trail, not as a current plan |
+| `PROPOSED_DUMMY_APP_UPGRADE.md` | The build brief for upgrading `dummy-app` to a React SPA | **Implemented** — `dummy-app/` now matches it. Kept as the as-built reference |
+| `MIGRATION_TO_FACTORY.md` | What changes (and doesn't) porting this to Factory | **On hold** — known to contain stale claims about Factory's current config/scripts; paused pending a real trial run against the Finbook project |
+| `tests/golden/README.md` | The seven acceptance scenarios proving the safety mechanisms work | Current |
+
+If you only read one more document after this one, make it `IMPLEMENTATION_STRATEGY.md`.

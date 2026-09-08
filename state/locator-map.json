@@ -3,37 +3,67 @@
     "elements": [
       {
         "confidenceTier": "stable-testid",
-        "name": "login-email-input",
+        "name": "email-input",
         "role": "textbox",
         "testId": "login-email"
       },
       {
         "confidenceTier": "stable-testid",
-        "name": "login-password-input",
+        "name": "password-input",
         "role": "textbox",
         "testId": "login-password"
       },
       {
         "confidenceTier": "stable-testid",
-        "name": "login-submit-button",
+        "name": "sign-in-button",
         "role": "button",
         "testId": "login-submit"
+      }
+    ],
+    "route": "/login",
+    "sourceHash": "PENDING"
+  },
+  {
+    "elements": [
+      {
+        "confidenceTier": "role-fallback",
+        "fallbackSelector": "getByRole('link',{name:'Items'})",
+        "name": "nav-items-link",
+        "role": "link"
+      },
+      {
+        "confidenceTier": "role-fallback",
+        "fallbackSelector": "getByRole('link',{name:'Cart'})",
+        "name": "nav-cart-link",
+        "role": "link"
+      },
+      {
+        "confidenceTier": "role-fallback",
+        "fallbackSelector": "getByRole('link',{name:'Orders'})",
+        "name": "nav-orders-link",
+        "role": "link"
+      },
+      {
+        "confidenceTier": "role-fallback",
+        "fallbackSelector": "getByRole('link',{name:'Profile'})",
+        "name": "nav-profile-link",
+        "role": "link"
       },
       {
         "confidenceTier": "role-fallback",
         "fallbackSelector": "getByRole('button',{name:'Sign out'})",
-        "name": "logout-button",
+        "name": "sign-out-button",
         "role": "button"
       },
       {
         "confidenceTier": "stable-testid",
-        "name": "item-name-input",
+        "name": "new-item-input",
         "role": "textbox",
         "testId": "item-name-input"
       },
       {
         "confidenceTier": "stable-testid",
-        "name": "add-item-submit-button",
+        "name": "add-item-button",
         "role": "button",
         "testId": "add-item-submit"
       },
@@ -45,43 +75,156 @@
       },
       {
         "confidenceTier": "role-fallback",
-        "fallbackSelector": "getByRole('button',{name:'Toggle Sort'})",
-        "name": "sort-toggle-button",
+        "fallbackSelector": "getByRole('button',{name:'Sort A\u2013Z'})",
+        "name": "sort-az-button",
         "role": "button"
       },
       {
         "confidenceTier": "stable-testid",
-        "name": "confirm-delete-button",
+        "name": "item-1-edit-button",
         "role": "button",
-        "testId": "confirm-delete"
+        "testId": "item-edit-1"
+      },
+      {
+        "confidenceTier": "flagged-unstable",
+        "name": "item-1-delete-button",
+        "note": "No data-testid; role+name 'Delete' is duplicated across item rows (item-1 and item-2), so a role-based fallback cannot disambiguate which row it targets.",
+        "role": "button"
       },
       {
         "confidenceTier": "stable-testid",
-        "name": "cancel-delete-button",
+        "name": "item-2-edit-button",
         "role": "button",
-        "testId": "cancel-delete"
+        "testId": "item-edit-2"
       },
       {
         "confidenceTier": "flagged-unstable",
-        "name": "item-name-edit-trigger-span",
-        "note": "app.js:43 \u2014 dynamically created <span> per item with only textContent (the item's name, which varies per row) and a title attribute ('Click to edit') shared by every row; no data-testid, id, or aria-label, so no selector uniquely and stably identifies a specific row's span.",
-        "role": "generic"
-      },
-      {
-        "confidenceTier": "flagged-unstable",
-        "name": "item-inline-edit-input",
-        "note": "app.js:49 \u2014 dynamically created <input> replacing the name span on click; has no data-testid, id, name, aria-label, or associated <label>, and its value is the item name (varies per row), so it has no stable identifying property.",
-        "role": "textbox"
-      },
-      {
-        "confidenceTier": "role-fallback",
-        "fallbackSelector": "getByRole('button',{name:'Delete'})",
-        "name": "item-delete-button",
-        "note": "app.js:78 \u2014 text is stable ('Delete') but every item row renders one, so this selector must be scoped to the specific row's <li> to target a single item; no data-testid is present (intentionally, per app.js:2-3 comment).",
+        "name": "item-2-delete-button",
+        "note": "No data-testid; role+name 'Delete' is duplicated across item rows (item-1 and item-2), so a role-based fallback cannot disambiguate which row it targets.",
         "role": "button"
       }
     ],
-    "route": "/",
+    "route": "/items",
+    "sourceHash": "PENDING"
+  },
+  {
+    "elements": [
+      {
+        "confidenceTier": "role-fallback",
+        "fallbackSelector": "getByRole('link',{name:'Items'})",
+        "name": "nav-items-link",
+        "role": "link"
+      },
+      {
+        "confidenceTier": "role-fallback",
+        "fallbackSelector": "getByRole('link',{name:'Cart'})",
+        "name": "nav-cart-link",
+        "role": "link"
+      },
+      {
+        "confidenceTier": "role-fallback",
+        "fallbackSelector": "getByRole('link',{name:'Orders'})",
+        "name": "nav-orders-link",
+        "role": "link"
+      },
+      {
+        "confidenceTier": "role-fallback",
+        "fallbackSelector": "getByRole('link',{name:'Profile'})",
+        "name": "nav-profile-link",
+        "role": "link"
+      },
+      {
+        "confidenceTier": "role-fallback",
+        "fallbackSelector": "getByRole('button',{name:'Sign out'})",
+        "name": "sign-out-button",
+        "role": "button"
+      }
+    ],
+    "route": "/cart",
+    "sourceHash": "PENDING"
+  },
+  {
+    "elements": [
+      {
+        "confidenceTier": "role-fallback",
+        "fallbackSelector": "getByRole('link',{name:'Items'})",
+        "name": "nav-items-link",
+        "role": "link"
+      },
+      {
+        "confidenceTier": "role-fallback",
+        "fallbackSelector": "getByRole('link',{name:'Cart'})",
+        "name": "nav-cart-link",
+        "role": "link"
+      },
+      {
+        "confidenceTier": "role-fallback",
+        "fallbackSelector": "getByRole('link',{name:'Orders'})",
+        "name": "nav-orders-link",
+        "role": "link"
+      },
+      {
+        "confidenceTier": "role-fallback",
+        "fallbackSelector": "getByRole('link',{name:'Profile'})",
+        "name": "nav-profile-link",
+        "role": "link"
+      },
+      {
+        "confidenceTier": "role-fallback",
+        "fallbackSelector": "getByRole('button',{name:'Sign out'})",
+        "name": "sign-out-button",
+        "role": "button"
+      }
+    ],
+    "route": "/orders",
+    "sourceHash": "PENDING"
+  },
+  {
+    "elements": [
+      {
+        "confidenceTier": "role-fallback",
+        "fallbackSelector": "getByRole('link',{name:'Items'})",
+        "name": "nav-items-link",
+        "role": "link"
+      },
+      {
+        "confidenceTier": "role-fallback",
+        "fallbackSelector": "getByRole('link',{name:'Cart'})",
+        "name": "nav-cart-link",
+        "role": "link"
+      },
+      {
+        "confidenceTier": "role-fallback",
+        "fallbackSelector": "getByRole('link',{name:'Orders'})",
+        "name": "nav-orders-link",
+        "role": "link"
+      },
+      {
+        "confidenceTier": "role-fallback",
+        "fallbackSelector": "getByRole('link',{name:'Profile'})",
+        "name": "nav-profile-link",
+        "role": "link"
+      },
+      {
+        "confidenceTier": "role-fallback",
+        "fallbackSelector": "getByRole('button',{name:'Sign out'})",
+        "name": "sign-out-button",
+        "role": "button"
+      },
+      {
+        "confidenceTier": "stable-testid",
+        "name": "username-input",
+        "role": "textbox",
+        "testId": "profile-username"
+      },
+      {
+        "confidenceTier": "stable-testid",
+        "name": "save-profile-button",
+        "role": "button",
+        "testId": "profile-save-button"
+      }
+    ],
+    "route": "/profile",
     "sourceHash": "PENDING"
   }
 ]
